@@ -114,10 +114,12 @@ def main():
         embed_dim=embed_dim,
         context_length=context_length,
     )
+    gpt2_model.model = gpt2_model.model.to(device="cuda:0")
+
     # pytorch lightning model checkpoint
     callbacks = [ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max")]
     trainer = Trainer(
-        accelerator="cpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10
+        accelerator="gpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10
     )
 
     # train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)

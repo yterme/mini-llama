@@ -23,6 +23,13 @@ class SelfAttention(nn.Module):
             # self.dk = ?
         # self.encoder_decoder = encoder_decoder
 
+    # def cuda(self, device):
+    #     self.WK.cuda(device)
+    #     self.WV.cuda(device)
+    #     self.WQ.cuda(device)
+
+
+
     def __call__(self, x, y=None):
         # assert self.encoder_decoder == (y is not None)
         q = x @ self.WQ
@@ -36,10 +43,11 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.output_dim = output_dim
-        self.WO = nn.Parameter(torch.randn(num_heads * output_dim, output_dim))
+        # self.WO = nn.Parameter(torch.randn(num_heads * output_dim, output_dim))
+        self.WO = nn.Linear(num_heads * output_dim, output_dim)
         self.attention = SelfAttention(input_dim, output_dim, masked=masked)
         self.masked = masked
 
     def __call__(self, x):
         outputs = torch.cat([self.attention(x) for _ in range(self.num_heads)], dim=2)
-        return outputs @ self.WO
+        return self.WO(outputs)

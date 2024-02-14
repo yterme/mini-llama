@@ -1,4 +1,4 @@
-torch
+torch==1.13.1
 datasets
-lightning
-torchvision
+lightning~=1.9.5
+transformers
