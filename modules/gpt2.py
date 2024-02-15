@@ -4,7 +4,6 @@ from pytorch_lightning import LightningModule
 from pytorch_lightning.utilities.types import STEP_OUTPUT, TRAIN_DATALOADERS
 import torch
 from .transformer import DecoderBlock
-from .tokenizer import GPTTokenizer
 from torch import nn
 
 from transformers import AutoTokenizer
@@ -29,17 +28,6 @@ def generate(model, tokenizer, x, max_length=50):
     # output = x @ self.mlp_head + self.mlp_head_bias
     return x
 
-class Decoder(nn.Module):
-    def __init__(self, num_layers, embed_dim, num_heads) -> None:
-        super().__init__()
-        self.layers = nn.ModuleList([DecoderBlock(embed_dim, num_heads).to("cuda:0") for _ in range(num_layers)])
-
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
-    
 
 def positional_encoding(context_length, embed_dim):
     position = torch.arange(0, context_length, dtype=torch.float32).unsqueeze(1)
@@ -57,30 +45,32 @@ class GPT2Model(nn.Module):
         self.embed_dim = embed_dim
         self.context_length = context_length
         self.context_length = context_length
-        # self.pos_embedding = nn.Parameter(torch.randn(self.context_length, embed_dim))
         self.pos_embedding = positional_encoding(context_length, embed_dim).to("cuda:0")
         self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.decoder = Decoder(num_layers, embed_dim, num_heads)
-            
+        self.layers = nn.ModuleList([DecoderBlock(embed_dim, num_heads).to("cuda:0") for _ in range(num_layers)])
+        self.ln = nn.LayerNorm(embed_dim)
+        self.lm_out = nn.Linear(embed_dim, vocab_size)
+
     def __call__(self, x):
         # pad sequence to context length
         x = self.embedding(x)
         x += self.pos_embedding
-        x = self.decoder(x)
-        x = x @ self.embedding.weight.T
+        for layer in self.layers:
+            x = layer(x)
+        x = self.ln(x)
+        x = self.lm_out(x)
+        # x = x @ self.embedding.weight.T
         # x = torch.softmax(x @ self.embedding.weight.T, dim=2)
         return x
     
 class GPT2(LightningModule):
-    def __init__(self, num_layers, num_heads, embed_dim, context_length, **kwargs):
+    def __init__(self, num_layers, num_heads, embed_dim, context_length, tokenizer, **kwargs):
         super().__init__(**kwargs)
-        self.init_tokenizer()
+        self.tokenizer = tokenizer
         self.embed_dim = embed_dim
         self.context_length = context_length
         self.model = GPT2Model(num_layers, num_heads, embed_dim, context_length, self.tokenizer.vocab_size)
 
-    def init_tokenizer(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
     def forward(self, x):
         return self.model(x)
@@ -91,7 +81,7 @@ class GPT2(LightningModule):
         x = torch.tensor(x).unsqueeze(0)
         y = self.forward(x)[0]
         # y = self.tokenizer.decode(y)
-        return torch.softmax(y, dim=2)
+        return torch.softmax(y, dim=1)
 
     def generate_next_max_likelihood(self, x):
         x = self.tokenizer.encode(x)

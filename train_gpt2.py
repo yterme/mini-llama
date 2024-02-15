@@ -103,7 +103,8 @@ def main():
     # huggingface tinystories dataset
     train_dataset = load_dataset("roneneldan/TinyStories", split="train")
     val_dataset = load_dataset("roneneldan/TinyStories", split="validation")
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    # tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2", vocab_size=5000)
     num_heads = 4
     embed_dim = 128
     num_layers = 6
@@ -113,13 +114,14 @@ def main():
         num_heads=num_heads,
         embed_dim=embed_dim,
         context_length=context_length,
+        tokenizer= tokenizer,
     )
     gpt2_model.model = gpt2_model.model.to(device="cuda:0")
 
     # pytorch lightning model checkpoint
     callbacks = [ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max")]
     trainer = Trainer(
-        accelerator="gpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10
+        accelerator="gpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10,
     )
 
     # train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
@@ -137,8 +139,8 @@ def main():
         tokenizer,
         sequence_length=100,
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True,  num_workers=6)
+    val_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False,  num_workers=6)
     trainer.fit(
         gpt2_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
     )
