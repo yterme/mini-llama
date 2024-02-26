@@ -44,26 +44,7 @@ class TokenizedDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, tokenizer, sequence_length):
         self.dataset = dataset
         self.tokenizer = tokenizer
-        # self.batch_size = batch_size
-        # self.shuffle = shuffle
         self.sequence_length = sequence_length
-        # super().__init__(dataset, **kwargs)
-
-        # sequences = []
-        # # def __iter__(self):
-        # # for i in range(0, len(self.dataset), self.sequence_length):
-        # for tokenized_story in dataset:
-        #     # sequence = self.dataset[i : i + self.sequence_length + 1]
-        #     # TODO add overlap
-        #     # tokenized_story = self.tokenizer.encode(text)
-        #     for i in range(0, len(tokenized_story), self.sequence_length):
-        #         sequence = tokenized_story[i : i + self.sequence_length]
-        #         # sequence = sequence + [self.tokenizer.pad_token_id] * (
-        #         #     self.sequence_length - len(sequence)
-        #         # )
-        #         sequence = torch.tensor(sequence)
-        #         input, target = sequence[:-1], sequence[1:]
-        #         sequences.append(input, target)
 
     def __len__(self):
         return len(self.dataset)
@@ -72,11 +53,12 @@ class TokenizedDataset(torch.utils.data.Dataset):
         sequence = self.dataset[idx]["text"]
         tokenized_story = self.tokenizer.encode(sequence)
         # padding
-        tokenized_story = tokenized_story + [0] * (
+        tokenized_story = tokenized_story + [self.tokenizer.vocab_size] * (
             self.sequence_length + 1 - len(tokenized_story)
         )
         # extract random sequence of length sequence_length
-        start = random.randint(0, len(tokenized_story) - 1 - self.sequence_length)
+        # start = random.randint(0, len(tokenized_story) - 1 - self.sequence_length)
+        start = 0
         # Extract input and target sequences
         input_sequence = torch.tensor(
             tokenized_story[start : start + self.sequence_length]
@@ -107,8 +89,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     num_heads = 4
     embed_dim = 128
-    num_layers = 6
-    context_length = 100
+    num_layers = 8
+    context_length = 150
     gpt_model = GPT(
         num_layers=num_layers,
         num_heads=num_heads,
@@ -124,22 +106,17 @@ def main():
         accelerator="gpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10,
     )
 
-    # train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    # val_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-    # tokenized_train_dataset = train_dataset.map(tokenizer.encode)
-    # tokenized_val_dataset = val_dataset.map(tokenizer.encode)
-
     train_dataset = TokenizedDataset(
         train_dataset,
         tokenizer,
-        sequence_length=100,
+        sequence_length=context_length,
     )
     val_dataset = TokenizedDataset(
         val_dataset,
         tokenizer,
-        sequence_length=100,
+        sequence_length=context_length,
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True,  num_workers=6)
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=6)
     val_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False,  num_workers=6)
     trainer.fit(
         gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader

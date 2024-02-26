@@ -18,8 +18,6 @@ class SelfAttention(nn.Module):
         self.masked = masked
 
 
-        
-
     def __call__(self, x, y=None):
         # assert self.encoder_decoder == (y is not None)
         q = x @ self.WQ
