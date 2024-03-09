@@ -47,14 +47,18 @@ def main():
 
     config = dict(
         num_heads = 16,
-        embed_dim = 512,
-        num_layers = 8,
-        context_length=512,
+        d_model = 512,
+        num_layers = 6,
+        context_length=200,
         activation = "swiglu",
         norm = "rms",
         gradient_clip = 1.0,
-        proba_dropout = 0.01
+        proba_dropout = 0.01,
+        num_query_heads_per_group = 4,
+        rope_embeddings = True,
     )
+    batch_size = 4
+    num_workers = 6
     gpt_model = GPT(tokenizer=tokenizer, **config)
     # pytorch lightning model checkpoint
     callbacks = [ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max")]
@@ -72,8 +76,8 @@ def main():
         tokenizer,
         sequence_length=config["context_length"],
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=6)
-    val_dataloader = DataLoader(val_dataset, batch_size=10, shuffle=False,  num_workers=6)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,  num_workers=num_workers)
     trainer.fit(
         gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
     )
@@ -84,6 +88,6 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train GPT2")
+    parser = argparse.ArgumentParser(description="Train GPT")
     args = parser.parse_args()
     main(**vars(args))

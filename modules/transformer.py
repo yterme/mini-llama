@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from .multi_head import MultiHeadAttention, MultiHeadAttention_Slow
+from .multi_head import MultiHeadAttention, MultiHeadAttention_Slow, RotaryPEMultiHeadAttention
 import math
 
 
@@ -53,9 +53,17 @@ class SwiGLU(nn.Module):
         return self.swish(self.linear1(x)) * self.linear2(x)
 
 class DecoderBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout=0, norm="rms", activation ="swiglu") -> None:
+    def __init__(
+            self, embed_dim, num_heads, dropout=0, norm="rms", activation ="swiglu", num_query_heads_per_group=None, rope=False
+        ) -> None:
         super().__init__()
-        self.attention = MultiHeadAttention(embed_dim, num_heads, masked=True, dropout=dropout)
+        if rope: 
+            mha_class = RotaryPEMultiHeadAttention
+        else:
+            mha_class = MultiHeadAttention
+        self.attention = mha_class(
+            embed_dim, num_heads, masked=True, dropout=dropout, num_query_heads_per_group=num_query_heads_per_group
+        )
         self.norm1 = {
             "rms": RMSNorm(embed_dim),
             "layer": nn.LayerNorm(embed_dim)

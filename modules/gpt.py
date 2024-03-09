@@ -7,12 +7,12 @@ from .transformer import DecoderBlock, RMSNorm
 from torch import nn
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, embed_dim, max_len):
-        super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, embed_dim)
+class PositionalEmbedding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEmbedding, self).__init__()
+        pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, embed_dim, 2).float() * (-math.log(10000.0) / embed_dim))
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         self.register_buffer('pe', pe)
@@ -25,32 +25,58 @@ class PositionalEncoding(nn.Module):
 
 
 class GPT(LightningModule):
-    def __init__(self, tokenizer, num_layers, num_heads, embed_dim, context_length, gradient_clip, norm="rms", activation="relu", proba_dropout=0.01, **kwargs):
+    def __init__(
+            self, 
+            tokenizer,
+            num_layers,
+            num_heads,
+            d_model,
+            context_length,
+            gradient_clip,
+            norm="rms",
+            activation="relu",
+            proba_dropout=0.01,
+            rope_embeddings=False,
+            num_query_heads_per_group=None,
+            **kwargs
+        ):
         super().__init__(**kwargs)
         self.gradient_clip = gradient_clip
         self.tokenizer = tokenizer
-        self.embed_dim = embed_dim
+        self.d_model = d_model
         self.context_length = context_length
         self.pad_token = self.tokenizer.vocab_size
         vocab_size = tokenizer.vocab_size + 1
     
-        self.embed_dim = embed_dim
+        self.d_model = d_model
         self.context_length = context_length
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.pos_embedding = PositionalEncoding(embed_dim, context_length)
-        self.layers = nn.ModuleList([DecoderBlock(embed_dim, num_heads, norm=norm, dropout=proba_dropout, activation=activation) for _ in range(num_layers)])
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        if rope_embeddings:
+            # identity - embeddings are computed in the multi head attention layer
+            self.pos_embedding = nn.Identity()
+        else:
+            self.pos_embedding = PositionalEmbedding(d_model, context_length)
+        self.layers = nn.ModuleList([
+            DecoderBlock(
+                d_model, 
+                num_heads, 
+                norm=norm, 
+                dropout=proba_dropout, 
+                activation=activation, 
+                rope=rope_embeddings,
+                num_query_heads_per_group=num_query_heads_per_group
+            ) for _ in range(num_layers)])
         self.dropout = nn.Dropout(p=proba_dropout)
         self.norm = {
-            "rms": RMSNorm(embed_dim),
-            "layer": nn.LayerNorm(embed_dim)
+            "rms": RMSNorm(d_model),
+            "layer": nn.LayerNorm(d_model)
         }[norm]
-        self.lm_head = nn.Linear(embed_dim, vocab_size, bias=False)
-        # self.apply(self._init_weights)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
 
     def forward(self, x):
         x = self.embedding(x)
         x = self.pos_embedding(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         for layer in self.layers:
             x = layer(x)
         x = self.norm(x)
