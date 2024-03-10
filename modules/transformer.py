@@ -10,22 +10,16 @@ class RMSNorm(nn.Module):
         self.scale = torch.nn.Parameter(torch.ones(d))
 
     def forward(self, x):
-        return x / (torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True)) + 1e-8) * self.scale
+        return x / (torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + 1e-8) * self.scale
+
 
 class TransformerEncoderBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, norm = "rms", dropout=0.0) -> None:
+    def __init__(self, embed_dim, num_heads, norm="rms", dropout=0.0) -> None:
         super().__init__()
         self.attention = MultiHeadAttention(embed_dim, num_heads, dropout=dropout)
-        self.norm1 = {
-            "rms": RMSNorm(embed_dim),
-            "layer": nn.LayerNorm(embed_dim)
-        }[norm]
-        self.norm2 = {
-            "rms": RMSNorm(embed_dim),
-            "layer": nn.LayerNorm(embed_dim)
-        }[norm]
+        self.norm1 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
+        self.norm2 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
         self.linear = nn.Linear(embed_dim, embed_dim)
-        
 
     def __call__(self, x):
         x = x + self.attention(self.norm1(x))
@@ -38,8 +32,14 @@ class NewGELU(nn.Module):
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT).
     Reference: Gaussian Error Linear Units (GELU) paper: https://arxiv.org/abs/1606.08415
     """
+
     def forward(self, x):
-        return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
+        return (
+            0.5
+            * x
+            * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
+        )
+
 
 class SwiGLU(nn.Module):
     def __init__(self, input_dim, output_dim) -> None:
@@ -52,26 +52,32 @@ class SwiGLU(nn.Module):
     def forward(self, x):
         return self.swish(self.linear1(x)) * self.linear2(x)
 
+
 class DecoderBlock(nn.Module):
     def __init__(
-            self, embed_dim, num_heads, dropout=0, norm="rms", activation ="swiglu", num_query_heads_per_key=None, rope=False
-        ) -> None:
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0,
+        norm="rms",
+        activation="swiglu",
+        num_query_heads_per_key=None,
+        rope=False,
+    ) -> None:
         super().__init__()
-        if rope: 
+        if rope:
             mha_class = RotaryPEMultiHeadAttention
         else:
             mha_class = MultiHeadAttention
         self.attention = mha_class(
-            embed_dim, num_heads, masked=True, dropout=dropout, num_query_heads_per_key=num_query_heads_per_key
+            embed_dim,
+            num_heads,
+            masked=True,
+            dropout=dropout,
+            num_query_heads_per_key=num_query_heads_per_key,
         )
-        self.norm1 = {
-            "rms": RMSNorm(embed_dim),
-            "layer": nn.LayerNorm(embed_dim)
-        }[norm]
-        self.norm2 = {
-            "rms": RMSNorm(embed_dim),
-            "layer": nn.LayerNorm(embed_dim)
-        }[norm]
+        self.norm1 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
+        self.norm2 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
 
         # MLP
         interm_embed_dim = 4 * embed_dim
@@ -79,10 +85,7 @@ class DecoderBlock(nn.Module):
             self.activation_unit = SwiGLU(embed_dim, interm_embed_dim)
         else:
             self.fc = nn.Linear(embed_dim, interm_embed_dim)
-            self.activation  = {
-                "gelu": NewGELU(),
-                "relu": nn.ReLU()
-            }[activation]
+            self.activation = {"gelu": NewGELU(), "relu": nn.ReLU()}[activation]
             self.activation_unit = lambda x: self.activation(self.fc(x))
         self.proj = nn.Linear(interm_embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)

@@ -15,7 +15,6 @@ class SelfAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.masked = masked
 
-
     def __call__(self, x, y=None):
         q = self.WQ(x)
         k = self.WK(x)
@@ -23,9 +22,8 @@ class SelfAttention(nn.Module):
         scores = q @ k.transpose(1, 2) / np.sqrt(self.dk)
         if self.masked:
             mask = torch.tril(torch.ones(x.size(1), x.size(1))).to(x.device)
-            scores = scores.masked_fill(mask==0, float('-inf'))
+            scores = scores.masked_fill(mask == 0, float("-inf"))
         attention = F.softmax(scores, dim=-1)
         scores = self.dropout(scores)
         y = attention @ v
         return y
-

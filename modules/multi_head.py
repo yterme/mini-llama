@@ -20,12 +20,11 @@ class RotaryPositionalEmbeddings(nn.Module):
 
     def forward(self, x: torch.Tensor):
         seq_len = x.size(2)
-        x1, x2 = x[..., :self.d], x[..., self.d:]
+        x1, x2 = x[..., : self.d], x[..., self.d :]
 
-        other_half = torch.cat([-x1[..., self.d//2:], x1[..., :self.d//2]], dim=-1)
-        x1 = x1 * self.cos_pe[:, :, :seq_len] +  other_half * self.sin_pe[:, :, :seq_len]
+        other_half = torch.cat([-x1[..., self.d // 2 :], x1[..., : self.d // 2]], dim=-1)
+        x1 = x1 * self.cos_pe[:, :, :seq_len] + other_half * self.sin_pe[:, :, :seq_len]
         return torch.cat((x1, x2), dim=-1)
-    
 
 
 class MultiHeadAttention_Slow(nn.Module):
@@ -35,7 +34,12 @@ class MultiHeadAttention_Slow(nn.Module):
         self.output_dim = embed_dim
         self.WO = nn.Linear(embed_dim, embed_dim)
         head_dim = embed_dim // num_heads
-        self.attentions = nn.ModuleList([SelfAttention(embed_dim, head_dim, masked=masked, dropout=dropout) for _ in range(num_heads)])
+        self.attentions = nn.ModuleList(
+            [
+                SelfAttention(embed_dim, head_dim, masked=masked, dropout=dropout)
+                for _ in range(num_heads)
+            ]
+        )
         self.dropout = nn.Dropout(p=dropout)
         self.masked = masked
 
@@ -43,10 +47,16 @@ class MultiHeadAttention_Slow(nn.Module):
         outputs = torch.cat([attention(x) for attention in self.attentions], dim=2)
         return self.dropout(self.WO(outputs))
 
+
 class MultiHeadAttention(nn.Module):
     def __init__(
-            self,
-            d_model: int, num_heads: int, dropout: float = 0.1, masked: Optional[int]=True, num_query_heads_per_key: Optional[int] = None):
+        self,
+        d_model: int,
+        num_heads: int,
+        dropout: float = 0.1,
+        masked: Optional[int] = True,
+        num_query_heads_per_key: Optional[int] = None,
+    ):
         super().__init__()
         assert masked
         assert d_model % num_heads == 0
@@ -88,10 +98,11 @@ class MultiHeadAttention(nn.Module):
             K = K.repeat_interleave(self.num_query_heads_per_key, dim=1)
             V = V.repeat_interleave(self.num_query_heads_per_key, dim=1)
 
-
         # Causal mask
         if mask is None:
-            mask = torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, seq_len)
+            mask = (
+                torch.tril(torch.ones(seq_len, seq_len)).unsqueeze(0).unsqueeze(0)
+            )  # (1, 1, seq_len, seq_len)
         else:
             mask = mask.unsqueeze(1).unsqueeze(1)  # Broadcast mask to match dimensions
 
@@ -108,7 +119,7 @@ class MultiHeadAttention(nn.Module):
         y = y.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
         output = self.linear_proj(y)  # Final projection
         return output
-    
+
 
 class RotaryPEMultiHeadAttention(MultiHeadAttention):
     def __init__(self, d_model: int, num_heads: int, rope_percentage: float = 0.5, **kwargs):

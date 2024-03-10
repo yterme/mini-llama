@@ -14,16 +14,16 @@ from transformers import AutoTokenizer
 
 def main(dataset: str = "tinystories"):
     config = dict(
-        num_heads = 16,
-        d_model = 512,
-        num_layers = 6,
+        num_heads=16,
+        d_model=512,
+        num_layers=6,
         context_length=500,
-        activation = "swiglu",
-        norm = "rms",
-        gradient_clip = 1.0,
-        proba_dropout = 0.01,
-        num_query_heads_per_key = 4,
-        rope_embeddings = True,
+        activation="swiglu",
+        norm="rms",
+        gradient_clip=1.0,
+        proba_dropout=0.01,
+        num_query_heads_per_key=4,
+        rope_embeddings=True,
     )
     batch_size = 16
     num_workers = 6
@@ -33,7 +33,10 @@ def main(dataset: str = "tinystories"):
     # pytorch lightning model checkpoint
     callbacks = [ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max")]
     trainer = Trainer(
-        accelerator="gpu", check_val_every_n_epoch=1, callbacks=callbacks, max_epochs=10,
+        accelerator="gpu",
+        check_val_every_n_epoch=1,
+        callbacks=callbacks,
+        max_epochs=10,
     )
 
     # huggingface tinystories dataset
@@ -52,17 +55,17 @@ def main(dataset: str = "tinystories"):
         )
     elif dataset == "chat":
         train_dataset = ChatDataset(
-            "data/_chat_cleaned.txt",
-            tokenizer=tokenizer,
-            sequence_length=config["context_length"]
+            "data/_chat_cleaned.txt", tokenizer=tokenizer, sequence_length=config["context_length"]
         )
     else:
         raise ValueError(f"Unknown dataset {dataset}")
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False,  num_workers=num_workers)
-    trainer.fit(
-        gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
+    val_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+    )
+    trainer.fit(gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     # model_name: use date and time
     model_name = f"gpt_model_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pth"
     # save model

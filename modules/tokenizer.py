@@ -14,9 +14,7 @@ class ViTTokenizer(nn.Module):
         self.num_channels = num_channels
         self.patch_size = patch_size
         # self.linear = nn.Linear(3 * PATCH_SIZE * PATCH_SIZE, embed_dim)
-        self.W = nn.Parameter(
-            torch.randn(self.num_channels * self.patch_size**2, embed_dim)
-        )
+        self.W = nn.Parameter(torch.randn(self.num_channels * self.patch_size**2, embed_dim))
         # learnable position embedding
         num_tokens = math.ceil(image_shape[0] / self.patch_size) * math.ceil(
             image_shape[1] / self.patch_size
