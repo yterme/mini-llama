@@ -54,7 +54,7 @@ class SwiGLU(nn.Module):
 
 class DecoderBlock(nn.Module):
     def __init__(
-            self, embed_dim, num_heads, dropout=0, norm="rms", activation ="swiglu", num_query_heads_per_group=None, rope=False
+            self, embed_dim, num_heads, dropout=0, norm="rms", activation ="swiglu", num_query_heads_per_key=None, rope=False
         ) -> None:
         super().__init__()
         if rope: 
@@ -62,7 +62,7 @@ class DecoderBlock(nn.Module):
         else:
             mha_class = MultiHeadAttention
         self.attention = mha_class(
-            embed_dim, num_heads, masked=True, dropout=dropout, num_query_heads_per_group=num_query_heads_per_group
+            embed_dim, num_heads, masked=True, dropout=dropout, num_query_heads_per_key=num_query_heads_per_key
         )
         self.norm1 = {
             "rms": RMSNorm(embed_dim),

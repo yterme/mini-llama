@@ -44,7 +44,9 @@ class MultiHeadAttention_Slow(nn.Module):
         return self.dropout(self.WO(outputs))
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1, masked: Optional[int]=True, num_query_heads_per_key: Optional[int] = None):
+    def __init__(
+            self,
+            d_model: int, num_heads: int, dropout: float = 0.1, masked: Optional[int]=True, num_query_heads_per_key: Optional[int] = None):
         super().__init__()
         assert masked
         assert d_model % num_heads == 0

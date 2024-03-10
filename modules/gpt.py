@@ -37,7 +37,7 @@ class GPT(LightningModule):
             activation="relu",
             proba_dropout=0.01,
             rope_embeddings=False,
-            num_query_heads_per_group=None,
+            num_query_heads_per_key=None,
             **kwargs
         ):
         super().__init__(**kwargs)
@@ -64,7 +64,7 @@ class GPT(LightningModule):
                 dropout=proba_dropout, 
                 activation=activation, 
                 rope=rope_embeddings,
-                num_query_heads_per_group=num_query_heads_per_group
+                num_query_heads_per_key=num_query_heads_per_key
             ) for _ in range(num_layers)])
         self.dropout = nn.Dropout(p=proba_dropout)
         self.norm = {
