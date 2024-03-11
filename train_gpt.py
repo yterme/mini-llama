@@ -1,37 +1,39 @@
 import argparse
 from datetime import datetime
 
+import yaml
 import torch
-from modules.data import ChatDataset, TokenizedDataset
-from modules.gpt import GPT
-
-from pytorch_lightning import Trainer
 from torch.utils.data import DataLoader
+from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
+from modules.data import ChatDataset, TokenizedDataset, pad_collate
+from modules.gpt import GPT
 
-def main(dataset: str = "tinystories"):
-    config = dict(
-        num_heads=16,
-        d_model=512,
-        num_layers=6,
-        context_length=500,
-        activation="swiglu",
-        norm="rms",
-        gradient_clip=1.0,
-        proba_dropout=0.01,
-        num_query_heads_per_key=4,
-        rope_embeddings=True,
-    )
-    batch_size = 16
+def main(dataset: str):
+    # load yaml config model_config.yaml
+    model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
+    batch_size = 12
     num_workers = 6
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    context_length = 1000
 
-    gpt_model = GPT(tokenizer=tokenizer, **config)
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    pad_token = tokenizer.vocab_size
+    vocab_size = tokenizer.vocab_size + 1
+
+    gpt_model = GPT(
+        vocab_size=vocab_size,
+        pad_token=pad_token,
+        context_length=context_length,
+        **model_config
+    )
     # pytorch lightning model checkpoint
-    callbacks = [ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max")]
+    callbacks = [
+        ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max"),
+        ModelCheckpoint(every_n_train_steps=1000)
+    ]
     trainer = Trainer(
         accelerator="gpu",
         check_val_every_n_epoch=1,
@@ -46,24 +48,25 @@ def main(dataset: str = "tinystories"):
         train_dataset = TokenizedDataset(
             train_dataset,
             tokenizer,
-            sequence_length=config["context_length"],
+            sequence_length=context_length,
         )
         val_dataset = TokenizedDataset(
             val_dataset,
             tokenizer,
-            sequence_length=config["context_length"],
+            sequence_length=context_length+1
         )
     elif dataset == "chat":
         train_dataset = ChatDataset(
-            "data/_chat_cleaned.txt", tokenizer=tokenizer, sequence_length=config["context_length"]
+            "data/_chat_cleaned.txt", tokenizer=tokenizer, sequence_length=context_length+1
         )
     else:
         raise ValueError(f"Unknown dataset {dataset}")
+    collate_fn = lambda x: pad_collate(x, padding_value=pad_token)
     train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate_fn
     )
     val_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn
     )
     trainer.fit(gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     # model_name: use date and time

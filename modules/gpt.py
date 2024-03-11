@@ -1,38 +1,41 @@
-import math
 from typing import Any
+
 from pytorch_lightning import LightningModule
 from pytorch_lightning.utilities.types import STEP_OUTPUT, TRAIN_DATALOADERS
 import torch
-from .transformer import DecoderBlock, RMSNorm
 from torch import nn
 
+from modules.embedding import PositionalEmbedding
+from modules.transformer import DecoderBlock, RMSNorm
 
-class PositionalEmbedding(nn.Module):
-    def __init__(self, d_model, max_len=5000):
-        super(PositionalEmbedding, self).__init__()
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer("pe", pe)
 
-    def forward(self, x):
-        seq_len = x.size(1)
-        pos_enc = self.pe[:seq_len, :].unsqueeze(0)
-        x = x + pos_enc
-        return x
+def generate_single_greedy(model, tokenizer, x):
+    x = tokenizer.encode(x)
+    x = x[-model.context_length :]
+    i = len(x)
+    y = model._predict_probas(x)
+    y = torch.argmax(y, dim=1)
+    y_next = y[i - 1]
+    return tokenizer.decode(y_next)
 
+def generate_greedy(model, tokenizer, x, max_length=50):
+    for _ in range(max_length):
+        new_token = generate_single_greedy(model, tokenizer, x)
+        x += new_token
+        if new_token == tokenizer.eos_token:
+            break
+    return x
 
 class GPT(LightningModule):
     def __init__(
         self,
-        tokenizer,
         num_layers,
         num_heads,
         d_model,
         context_length,
         gradient_clip,
+        vocab_size,
+        pad_token,
         norm="rms",
         activation="relu",
         proba_dropout=0.01,
@@ -41,16 +44,14 @@ class GPT(LightningModule):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.gradient_clip = gradient_clip
-        self.tokenizer = tokenizer
-        self.d_model = d_model
-        self.context_length = context_length
-        self.pad_token = self.tokenizer.vocab_size
-        vocab_size = tokenizer.vocab_size + 1
+        self.save_hyperparameters()
 
+        self.gradient_clip = gradient_clip
         self.d_model = d_model
+        self.pad_token = pad_token
+        vocab_size = vocab_size
         self.context_length = context_length
-        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.text_embedding = nn.Embedding(vocab_size, d_model)
         if rope_embeddings:
             # identity - embeddings are computed in the multi head attention layer
             self.pos_embedding = nn.Identity()
@@ -75,7 +76,7 @@ class GPT(LightningModule):
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
 
     def forward(self, x):
-        x = self.embedding(x)
+        x = self.text_embedding(x)
         x = self.pos_embedding(x)
         x = self.dropout(x)
         for layer in self.layers:
@@ -90,21 +91,6 @@ class GPT(LightningModule):
         x = torch.tensor(x).unsqueeze(0).to(self.device)
         y = self.forward(x)[0]
         return torch.softmax(y, dim=1)
-
-    def generate_next_max_likelihood(self, x):
-        x = x[-self.context_length :]
-        x = self.tokenizer.encode(x)
-        i = len(x)
-        y = self._predict_probas(x)
-        y = torch.argmax(y, dim=1)
-        y_next = y[i - 1]
-        return self.tokenizer.decode(y_next)
-
-    def generate(self, x, max_length=50):
-        for _ in range(max_length):
-            new_token = self.generate_next_max_likelihood(x)
-            x += new_token
-        return x
 
     def compute_loss(self, batch) -> torch.Tensor:
         inputs, target = batch
@@ -143,4 +129,4 @@ class GPT(LightningModule):
         return super().train_dataloader()
 
     def configure_optimizers(self) -> Any:
-        return torch.optim.Adam(self.parameters(), lr=0.001)
+        return torch.optim.Adam(self.parameters(), lr=1e-3)

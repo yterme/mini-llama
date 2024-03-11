@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from .multi_head import MultiHeadAttention, MultiHeadAttention_Slow, RotaryPEMultiHeadAttention
+from .multi_head import MultiHeadAttention, RotaryPEMultiHeadAttention
 import math
 
 
@@ -69,10 +69,11 @@ class DecoderBlock(nn.Module):
             mha_class = RotaryPEMultiHeadAttention
         else:
             mha_class = MultiHeadAttention
+        
         self.attention = mha_class(
             embed_dim,
             num_heads,
-            masked=True,
+            is_causal=True,
             dropout=dropout,
             num_query_heads_per_key=num_query_heads_per_key,
         )
