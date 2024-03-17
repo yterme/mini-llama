@@ -45,19 +45,25 @@ class MultiHeadAttention(nn.Module):
         self.is_causal = is_causal
         self.use_efficient = use_efficient
         self.d_model = d_model
-        self.num_heads = num_heads
+        self.num_q_heads = num_heads
         self.d_k = d_model // num_heads
         if num_query_heads_per_key is None:
-            # multi-query attention
-            self.num_query_heads_per_key = num_heads
+            # regular multi head attention
+            self.num_query_heads_per_key = 1
         else:
             # grouped-query attention
             # set to 1 for traditional multi head attention
             assert num_heads % num_query_heads_per_key == 0
             self.num_query_heads_per_key = num_query_heads_per_key
-        self.linear_q = nn.Linear(d_model, d_model)
-        self.linear_k = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
-        self.linear_v = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
+        # self.linear_q = nn.Linear(d_model, d_model)
+        # self.linear_k = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
+        # self.linear_v = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
+        self.QKV_sizes = [
+            d_model,
+            d_model // self.num_query_heads_per_key,
+            d_model // self.num_query_heads_per_key,
+        ]
+        self.linear_qkv = nn.Linear(d_model, sum(self.QKV_sizes))
         self.p_dropout = dropout
         self.dropout = nn.Dropout(p=dropout)
         self.softmax = nn.Softmax(dim=-1)
@@ -70,19 +76,18 @@ class MultiHeadAttention(nn.Module):
         batch_size, seq_len = x.size(0), x.size(1)
 
         # Linear projections
-        Q = self.linear_q(x)
-        K = self.linear_k(x)
-        V = self.linear_v(x)
-
+        # Q = self.linear_q(x)
+        # K = self.linear_k(x)
+        # V = self.linear_v(x)
+        Q, K, V = self.linear_qkv(x).split(self.QKV_sizes, dim=-1)
         # Split and transpose
-        Q = Q.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
-        num_key_value_heads = self.num_heads // self.num_query_heads_per_key
-        K = K.view(batch_size, seq_len, num_key_value_heads, self.d_k).transpose(1, 2)
-        V = V.view(batch_size, seq_len, num_key_value_heads, self.d_k).transpose(1, 2)
-        if num_key_value_heads > 1:
+        Q = Q.view(batch_size, seq_len, self.num_q_heads, self.d_k).transpose(1, 2)
+        num_kv_heads = self.num_q_heads // self.num_query_heads_per_key
+        K = K.view(batch_size, seq_len, num_kv_heads, self.d_k).transpose(1, 2)
+        V = V.view(batch_size, seq_len, num_kv_heads, self.d_k).transpose(1, 2)
+        if self.num_query_heads_per_key > 1:
             K = K.repeat_interleave(self.num_query_heads_per_key, dim=1)
             V = V.repeat_interleave(self.num_query_heads_per_key, dim=1)
-
         Q, K = self.compute_QK(Q, K)
         if self.use_efficient:
             y = torch.nn.functional.scaled_dot_product_attention(
@@ -116,10 +121,9 @@ class RotaryPEMultiHeadAttention(MultiHeadAttention):
         d_rope = int(self.d_k * rope_percentage)
         # not implemented for efficient attention
         assert not kwargs.get("use_efficient", False)
-        self.query_rotary_pe = RotaryPositionalEmbeddings(d_rope)
-        self.key_rotary_pe = RotaryPositionalEmbeddings(d_rope)
+        self.rotary_pe = RotaryPositionalEmbeddings(d_rope)
 
     def compute_QK(self, query: torch.Tensor, key: torch.Tensor):
-        Q = self.query_rotary_pe(query)
-        K = self.key_rotary_pe(key)
+        Q = self.rotary_pe(query)
+        K = self.rotary_pe(key)
         return Q, K

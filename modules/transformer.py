@@ -10,7 +10,7 @@ class RMSNorm(nn.Module):
         self.scale = torch.nn.Parameter(torch.ones(d))
 
     def forward(self, x):
-        return x / (torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + 1e-8) * self.scale
+        return x / (torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + 1e-6) * self.scale
 
 
 class TransformerEncoderBlock(nn.Module):
@@ -44,7 +44,6 @@ class NewGELU(nn.Module):
 class SwiGLU(nn.Module):
     def __init__(self, input_dim, output_dim) -> None:
         super().__init__()
-        # self.swish = Swish(beta)
         self.swish = torch.nn.SiLU()
         self.linear1 = nn.Linear(input_dim, output_dim)
         self.linear2 = nn.Linear(input_dim, output_dim)
@@ -69,7 +68,7 @@ class DecoderBlock(nn.Module):
             mha_class = RotaryPEMultiHeadAttention
         else:
             mha_class = MultiHeadAttention
-        
+
         self.attention = mha_class(
             embed_dim,
             num_heads,

@@ -27,6 +27,7 @@ def generate_greedy(model, tokenizer, x, max_length=50):
     return x
 
 class GPT(LightningModule):
+
     def __init__(
         self,
         num_layers,
@@ -34,8 +35,8 @@ class GPT(LightningModule):
         d_model,
         context_length,
         gradient_clip,
-        vocab_size,
         pad_token,
+        vocab_size=50304,
         norm="rms",
         activation="relu",
         proba_dropout=0.01,
@@ -92,14 +93,14 @@ class GPT(LightningModule):
         y = self.forward(x)[0]
         return torch.softmax(y, dim=1)
 
-    def compute_loss(self, batch) -> torch.Tensor:
+    def compute_metrics(self, batch) -> torch.Tensor:
         inputs, target = batch
         output = self.forward(inputs).transpose(1, 2)
         loss = torch.nn.functional.cross_entropy(output, target, ignore_index=self.pad_token)
         # accuracy
         preds = torch.argmax(output, dim=1)
         correct_mask = (preds == target)[target != self.pad_token]
-        correct_sum = correct_mask.sum().item()
+        correct_sum = correct_mask.sum()
         total = correct_mask.size(0)
         acc = correct_sum / total
         return loss, acc
@@ -107,7 +108,7 @@ class GPT(LightningModule):
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
         opt = self.optimizers()
         opt.zero_grad()
-        loss, acc = self.compute_loss(batch)
+        loss, acc = self.compute_metrics(batch)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.manual_backward(loss)
@@ -120,7 +121,7 @@ class GPT(LightningModule):
         return
 
     def validation_step(self, batch, batch_idx):
-        loss, acc = self.compute_loss(batch)
+        loss, acc = self.compute_metrics(batch)
         self.log("val_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss

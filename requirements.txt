@@ -1,4 +1,6 @@
-torch==1.13.1
+torch==2.2.0
 datasets
 lightning~=1.9.5
 transformers
+tokenizers
+sentencepiece
