@@ -8,19 +8,26 @@ from torch import nn
 from modules.embedding import PositionalEmbedding
 from modules.transformer import DecoderBlock, RMSNorm
 
-
 def generate_single_greedy(model, tokenizer, x):
     x = tokenizer.encode(x)
+    if x[-1] == tokenizer.eos_token_id:
+        x = x[:-1]
     x = x[-model.context_length :]
     i = len(x)
     y = model._predict_probas(x)
     y = torch.argmax(y, dim=1)
-    y_next = y[i - 1]
-    return tokenizer.decode(y_next)
+    y_next = y[i - 1].item()
+    return tokenizer.convert_ids_to_tokens(y_next)
+
 
 def generate_greedy(model, tokenizer, x, max_length=50):
+    new_token = None
     for _ in range(max_length):
         new_token = generate_single_greedy(model, tokenizer, x)
+        if new_token.startswith("▁"):
+            new_token = new_token[1:]
+            if len(x) > 0 and not x.endswith(" "):
+                new_token = " " + new_token
         x += new_token
         if new_token == tokenizer.eos_token:
             break
@@ -36,7 +43,7 @@ class GPT(LightningModule):
         context_length,
         gradient_clip,
         pad_token,
-        vocab_size=50304,
+        vocab_size,
         norm="rms",
         activation="relu",
         proba_dropout=0.01,
@@ -50,7 +57,6 @@ class GPT(LightningModule):
         self.gradient_clip = gradient_clip
         self.d_model = d_model
         self.pad_token = pad_token
-        vocab_size = vocab_size
         self.context_length = context_length
         self.text_embedding = nn.Embedding(vocab_size, d_model)
         if rope_embeddings:

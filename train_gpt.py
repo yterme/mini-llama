@@ -65,8 +65,6 @@ def main(
         elif dataset == "french":
             train_dataset = load_dataset("OpenLLM-France/Claire-Dialogue-French-0.1", split="train")
             val_dataset = load_dataset("OpenLLM-France/Claire-Dialogue-French-0.1", split="test")
-        # train_dataset = train_dataset.map(lambda sample: tokenizer(sample["text"]))
-        # val_dataset = val_dataset.map(lambda sample: tokenizer(sample["text"]))
         train_dataset = TokenizedDataset(
             train_dataset,
             tokenizer,

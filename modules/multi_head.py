@@ -55,15 +55,9 @@ class MultiHeadAttention(nn.Module):
             # set to 1 for traditional multi head attention
             assert num_heads % num_query_heads_per_key == 0
             self.num_query_heads_per_key = num_query_heads_per_key
-        # self.linear_q = nn.Linear(d_model, d_model)
-        # self.linear_k = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
-        # self.linear_v = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
-        self.QKV_sizes = [
-            d_model,
-            d_model // self.num_query_heads_per_key,
-            d_model // self.num_query_heads_per_key,
-        ]
-        self.linear_qkv = nn.Linear(d_model, sum(self.QKV_sizes))
+        self.linear_q = nn.Linear(d_model, d_model)
+        self.linear_k = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
+        self.linear_v = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
         self.p_dropout = dropout
         self.dropout = nn.Dropout(p=dropout)
         self.softmax = nn.Softmax(dim=-1)
@@ -76,10 +70,9 @@ class MultiHeadAttention(nn.Module):
         batch_size, seq_len = x.size(0), x.size(1)
 
         # Linear projections
-        # Q = self.linear_q(x)
-        # K = self.linear_k(x)
-        # V = self.linear_v(x)
-        Q, K, V = self.linear_qkv(x).split(self.QKV_sizes, dim=-1)
+        Q = self.linear_q(x)
+        K = self.linear_k(x)
+        V = self.linear_v(x)
         # Split and transpose
         Q = Q.view(batch_size, seq_len, self.num_q_heads, self.d_k).transpose(1, 2)
         num_kv_heads = self.num_q_heads // self.num_query_heads_per_key

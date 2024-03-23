@@ -80,14 +80,14 @@ class DecoderBlock(nn.Module):
         self.norm2 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
 
         # MLP
-        interm_embed_dim = 4 * embed_dim
+        hidden_dim = 4 * embed_dim
         if activation == "swiglu":
-            self.activation_unit = SwiGLU(embed_dim, interm_embed_dim)
+            self.activation_unit = SwiGLU(embed_dim, hidden_dim)
         else:
-            self.fc = nn.Linear(embed_dim, interm_embed_dim)
+            self.fc = nn.Linear(embed_dim, hidden_dim)
             self.activation = {"gelu": NewGELU(), "relu": nn.ReLU()}[activation]
             self.activation_unit = lambda x: self.activation(self.fc(x))
-        self.proj = nn.Linear(interm_embed_dim, embed_dim)
+        self.proj = nn.Linear(hidden_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
         self.mlp = lambda x: self.dropout(self.proj(self.activation_unit(x)))
 
