@@ -33,9 +33,6 @@ class ModelArgs:
     use_rope_embeddings: bool = True
     n_query_heads_per_key: Optional[int] = None
 
-    max_batch_size: int = 32
-    max_seq_len: int = 1024
-
 
 class Transformer(nn.Module):
 
@@ -44,8 +41,6 @@ class Transformer(nn.Module):
         params: ModelArgs,
     ):
         super().__init__()
-        # self.max_seq_len = params.max_seq_len
-        # self.pad_token = params.pad_token
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
         if params.use_rope_embeddings:
             # identity - embeddings are computed in the multi head attention layer
