@@ -10,7 +10,8 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from modules.data import ChatDataset, TokenizedDataset, pad_collate
-from modules.gpt import GPT
+from modules.model import LanguageModel
+from modules.transformer import ModelArgs, Transformer
 
 
 def main(
@@ -20,26 +21,29 @@ def main(
     check_val_every_n_epoch: int,
     load_ckpt: str = None,
 ):
-    # load yaml config model_config.yaml
-    model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
-    batch_size = 12
-    num_workers = 6
-    context_length = 1024
-
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
-    pad_token = tokenizer.vocab_size
-    vocab_size = 50304
-    # vocab_size = tokenizer.vocab_size + 1
 
     if load_ckpt is not None:
         # load checkpoint
-        gpt_model = GPT.load_from_checkpoint(load_ckpt)
+        language_model = LanguageModel.load_from_checkpoint(load_ckpt)
     else:
-        gpt_model = GPT(
-            vocab_size=vocab_size,
+        model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
+        model_args = ModelArgs(**model_config)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
+        model_args.vocab_size = tokenizer.vocab_size + 1
+        pad_token = tokenizer.vocab_size
+        gradient_clip = 1.0
+        context_length = 1024
+        lr = 1e-3
+        num_workers = 6
+        batch_size = 12
+        # vocab_size = 50304
+        model = Transformer(model_args)
+        language_model = LanguageModel(
+            model=model,
+            lr=lr,
             pad_token=pad_token,
             context_length=context_length,
-            **model_config,
+            gradient_clip=gradient_clip,
         )
     # pytorch lightning model checkpoint
     callbacks = [
@@ -92,11 +96,11 @@ def main(
         num_workers=num_workers,
         collate_fn=collate_fn,
     )
-    trainer.fit(gpt_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    trainer.fit(language_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     # model_name: use date and time
     model_name = f"gpt_model_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pth"
     # save model
-    torch.save(gpt_model.state_dict(), model_name)
+    torch.save(language_model.state_dict(), model_name)
 
 
 if __name__ == "__main__":

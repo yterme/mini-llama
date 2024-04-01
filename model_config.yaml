@@ -1,9 +1,7 @@
-num_heads: 16
-d_model: 512
-num_layers: 6
-activation: "swiglu"
+n_heads: 16
+dim: 512
+n_layers: 6
 norm: "rms"
-gradient_clip: 1.0
 proba_dropout: 0.01
-num_query_heads_per_key: 4
-rope_embeddings: True
+n_query_heads_per_key: 4
+use_rope_embeddings: True
