@@ -11,76 +11,69 @@ from modules.transformer import Transformer, ModelArgs
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
 
-class LLaMA:
+def build_llama_model(
+    checkpoint_dir: str,
+    vocab_size: int,
+) -> Transformer:
+    checkpoints = [
+        x for x in sorted(Path(checkpoint_dir).glob("*.pth"))
+    ]
+    assert len(checkpoints) > 0, f"no checkpoint files found in {checkpoint_dir}"
+    ckpt_path = checkpoints[0]
 
-    def __init__(self, model: Transformer, tokenizer: SentencePieceProcessor):
-        self.model = model
-        self.tokenizer = tokenizer
+    with open(Path(checkpoint_dir, "params.json"), "r") as f:
+        params = json.loads(f.read())
 
-    @staticmethod
-    def build(
-        checkpoint_dir: str,
-        tokenizer_path: str,
-    ):
-        checkpoints = [
-            x for x in sorted(Path(checkpoint_dir).glob("*.pth")) if "copy" not in x.stem
-        ]
-        assert len(checkpoints) > 0, f"no checkpoint files found in {checkpoint_dir}"
-        ckpt_path = checkpoints[0]
-        # checkpoint = torch.load(ckpt_path, map_location="cpu")
-        # if "rope.freqs" in checkpoint:
-        #     del checkpoint["rope.freqs"]
-        #     torch.save(checkpoint, ckpt_path)
-        with open(Path(checkpoint_dir, "params.json"), "r") as f:
-            params = json.loads(f.read())
+    model_args = ModelArgs(**params)
+    model_args.vocab_size = vocab_size
 
-        tokenizer = SentencePieceProcessor()
-        tokenizer.load(tokenizer_path)
+    # use huggingface accelerate to load the model as bfloat16 on a 16GB GPU
+    with init_empty_weights():
+        model = Transformer(model_args)
+    print(f"Loading model from {ckpt_path}")
+    model = load_checkpoint_and_dispatch(
+        model, checkpoint=str(ckpt_path), device_map="auto", dtype="bfloat16"
+    )
+    return model
 
-        model_args = ModelArgs(**params)
-        model_args.vocab_size = tokenizer.vocab_size()
+def generate_single_greedy(model, tokens):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    x = torch.tensor(tokens).unsqueeze(0).to(device)
+    logits = model(x)
+    probas = torch.softmax(logits[:, -1], dim=-1)
+    next_token = torch.argmax(probas, dim=-1).tolist()[0]
+    return next_token
 
-        # use huggingface accelerate to load the model as bfloat16
-        with init_empty_weights():
-            model = Transformer(model_args)
-        print(f"Loading model from {ckpt_path}")
-        model = load_checkpoint_and_dispatch(
-            model, checkpoint=str(ckpt_path), device_map="auto", dtype="bfloat16"
-        )
-        return LLaMA(model, tokenizer)
-
-    def generate_single_greedy(self, tokens):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        x = torch.tensor(tokens).unsqueeze(0).to(device)
-        logits = self.model(x)
-        probas = torch.softmax(logits[:, -1], dim=-1)
-        next_token = torch.argmax(probas, dim=-1).tolist()[0]
-        return next_token
-
-    def generate_greedy(self, x, max_length=50):
-        token_ids = self.tokenizer.encode(x)
-        token_ids.insert(0, self.tokenizer.bos_id())
-        for _ in range(max_length):
-            new_token_id = self.generate_single_greedy(token_ids)
-            token_ids.append(new_token_id)
-            if new_token_id == self.tokenizer.eos_id():
-                break
-        return self.tokenizer.decode(token_ids)
+def generate_greedy(model, tokenizer, x, max_length=50):
+    token_ids = tokenizer.encode(x)
+    token_ids.insert(0, tokenizer.bos_id())
+    for _ in range(max_length):
+        new_token_id = generate_single_greedy(model, token_ids)
+        token_ids.append(new_token_id)
+        if new_token_id == tokenizer.eos_id():
+            break
+    return tokenizer.decode(token_ids)
 
 
 def main(checkpoint_dir, tokenizer_path):
-    llama = LLaMA.build(
+    tokenizer = SentencePieceProcessor()
+    tokenizer.load(tokenizer_path)
+    llama = build_llama_model(
         checkpoint_dir=checkpoint_dir,
-        tokenizer_path=tokenizer_path,
+        vocab_size=tokenizer.vocab_size(),
     )
 
+    system_prompt = """
+    Answer in a precise and concise manner.
+    """
     sentences = [
-        "Who was the third president of the United States?\n",
-        "What is the capital of France?\n",
-        "Why is the sky blue?\n",
+        "Who was the third president of the United States?",
+        "What is the capital of France?",
+        "Why is the sky blue?",
     ]
     for sentence in sentences:
-        print(llama.generate_greedy(sentence))
+        prompt = f"{system_prompt} /n {sentence}"
+        print(generate_greedy(llama, tokenizer, prompt, max_length=50))
         print()
 
 

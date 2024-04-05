@@ -100,8 +100,8 @@ class DecoderBlock(nn.Module):
             mha_class = MultiHeadAttention
 
         self.attention = mha_class(
-            dim,
-            n_heads,
+            dim=dim,
+            n_heads=n_heads,
             is_causal=True,
             dropout=p_dropout,
             n_query_heads_per_key=n_query_heads_per_key,

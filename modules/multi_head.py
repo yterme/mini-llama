@@ -13,7 +13,7 @@ class MultiHeadAttention(nn.Module):
     def __init__(
         self,
         dim: int,
-        num_heads: int,
+        n_heads: int,
         dropout: float = 0.1,
         is_causal: Optional[bool] = True,
         n_query_heads_per_key: Optional[int] = None,
@@ -21,19 +21,19 @@ class MultiHeadAttention(nn.Module):
     ):
         super().__init__()
         assert is_causal
-        assert dim % num_heads == 0
+        assert dim % n_heads == 0
         self.is_causal = is_causal
         self.use_efficient = use_efficient
         self.dim = dim
-        self.n_q_heads = num_heads
-        self.d_kv = dim // num_heads
+        self.n_q_heads = n_heads
+        self.d_kv = dim // n_heads
         if n_query_heads_per_key is None:
             # regular multi head attention
             self.n_query_heads_per_kv = 1
         else:
             # grouped-query attention
             # set to 1 for traditional multi head attention
-            assert num_heads % n_query_heads_per_key == 0
+            assert n_heads % n_query_heads_per_key == 0
             self.n_query_heads_per_kv = n_query_heads_per_key
         self.n_kv_heads = self.n_q_heads // self.n_query_heads_per_kv
         self.wq = nn.Linear(dim, self.d_kv * self.n_q_heads, bias=False)
@@ -85,14 +85,11 @@ class MultiHeadAttention(nn.Module):
         output = self.wo(y)  # Final projection
         return output
 
-
 class RotaryPEMultiHeadAttention(MultiHeadAttention):
 
-    def __init__(self, dim: int, num_heads: int, rope_percentage: float = 0.5, **kwargs):
-        super().__init__(dim=dim, num_heads=num_heads, **kwargs)
+    def __init__(self, rope_percentage: float = 0.5, **kwargs):
+        super().__init__(**kwargs)
         d_rope = int(self.d_kv * rope_percentage)
-        # not implemented for efficient attention
-        assert not kwargs.get("use_efficient", False)
         self.rotary_pe = RotaryPositionalEmbeddings(d_rope)
 
     def compute_QK(self, query: torch.Tensor, key: torch.Tensor):
