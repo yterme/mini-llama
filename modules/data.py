@@ -23,12 +23,12 @@ class TokenizedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         sequence = self.dataset[idx]["text"]
-        tokenized_story = self.tokenizer.encode(sequence)
+        tokenized_story = self.tokenizer.encode(sequence, return_tensors="pt")[0]
         # extract random sequence of length sequence_length
         if self.sequence_length is not None:
             start = random.randint(0, max(0, len(tokenized_story) - 1 - self.sequence_length))
             tokenized_story = tokenized_story[start : start + self.sequence_length]
-        return torch.tensor(tokenized_story)
+        return tokenized_story
 
 
 class ChatDataset(torch.utils.data.Dataset):

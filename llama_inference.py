@@ -43,6 +43,7 @@ class LLaMA:
         # use huggingface accelerate to load the model as bfloat16
         with init_empty_weights():
             model = Transformer(model_args)
+        print(f"Loading model from {ckpt_path}")
         model = load_checkpoint_and_dispatch(
             model, checkpoint=str(ckpt_path), device_map="auto", dtype="bfloat16"
         )
@@ -76,7 +77,7 @@ def main(checkpoint_dir, tokenizer_path):
     sentences = [
         "Who was the third president of the United States?\n",
         "What is the capital of France?\n",
-        "How long did the Hundred Years' War last?\n",
+        "Why is the sky blue?\n",
     ]
     for sentence in sentences:
         print(llama.generate_greedy(sentence))

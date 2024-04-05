@@ -23,7 +23,6 @@ def main(
 ):
 
     if load_ckpt is not None:
-        # load checkpoint
         language_model = LanguageModel.load_from_checkpoint(load_ckpt)
     else:
         model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
@@ -37,6 +36,7 @@ def main(
         num_workers = 6
         batch_size = 12
         # vocab_size = 50304
+
         model = Transformer(model_args)
         language_model = LanguageModel(
             model=model,
@@ -45,7 +45,6 @@ def main(
             context_length=context_length,
             gradient_clip=gradient_clip,
         )
-    # pytorch lightning model checkpoint
     callbacks = [
         ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max"),
         ModelCheckpoint(every_n_train_steps=1000)
@@ -57,7 +56,6 @@ def main(
         max_epochs=epochs,
     )
 
-    # huggingface tinystories dataset
     if dataset == "chat":
         train_dataset = ChatDataset(
             "data/_chat_cleaned.txt", tokenizer=tokenizer, sequence_length=context_length + 1
@@ -88,6 +86,7 @@ def main(
         shuffle=True,
         num_workers=num_workers,
         collate_fn=collate_fn,
+        pin_memory=True,
     )
     val_dataloader = DataLoader(
         val_dataset,
@@ -95,11 +94,10 @@ def main(
         shuffle=False,
         num_workers=num_workers,
         collate_fn=collate_fn,
+        pin_memory=True,
     )
     trainer.fit(language_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-    # model_name: use date and time
     model_name = f"gpt_model_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pth"
-    # save model
     torch.save(language_model.state_dict(), model_name)
 
 
