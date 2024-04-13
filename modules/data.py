@@ -23,6 +23,8 @@ class TokenizedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         sequence = self.dataset[idx]["text"]
+        # add start and end tokens
+        sequence += self.tokenizer.eos_token
         tokenized_story = self.tokenizer.encode(sequence, return_tensors="pt")[0]
         # extract random sequence of length sequence_length
         if self.sequence_length is not None:

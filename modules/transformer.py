@@ -18,7 +18,7 @@ from modules.embedding import PositionalEmbedding
 
 
 @dataclass
-class ModelArgs:
+class ModelParams:
     dim: int = 4096
     n_layers: int = 32
     n_heads: int = 32
@@ -35,10 +35,9 @@ class ModelArgs:
 
 
 class Transformer(nn.Module):
-
     def __init__(
         self,
-        params: ModelArgs,
+        params: ModelParams,
     ):
         super().__init__()
         self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim)
@@ -82,7 +81,6 @@ class Transformer(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-
     def __init__(
         self,
         dim,
@@ -135,7 +133,6 @@ class FeedForward(nn.Module):
 
 
 class RMSNorm(nn.Module):
-
     def __init__(self, d, eps: float = 1e-6) -> None:
         super().__init__()
         self.weight = torch.nn.Parameter(torch.ones(d))

@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 from sentencepiece import SentencePieceProcessor
 
-from modules.transformer import Transformer, ModelArgs
+from modules.transformer import Transformer, ModelParams
 
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
@@ -15,16 +15,14 @@ def build_llama_model(
     checkpoint_dir: str,
     vocab_size: int,
 ) -> Transformer:
-    checkpoints = [
-        x for x in sorted(Path(checkpoint_dir).glob("*.pth"))
-    ]
+    checkpoints = [x for x in sorted(Path(checkpoint_dir).glob("*.pth"))]
     assert len(checkpoints) > 0, f"no checkpoint files found in {checkpoint_dir}"
     ckpt_path = checkpoints[0]
 
     with open(Path(checkpoint_dir, "params.json"), "r") as f:
         params = json.loads(f.read())
 
-    model_args = ModelArgs(**params)
+    model_args = ModelParams(**params)
     model_args.vocab_size = vocab_size
 
     # use huggingface accelerate to load the model as bfloat16 on a 16GB GPU
@@ -36,6 +34,7 @@ def build_llama_model(
     )
     return model
 
+
 def generate_single_greedy(model, tokens):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     x = torch.tensor(tokens).unsqueeze(0).to(device)
@@ -43,6 +42,7 @@ def generate_single_greedy(model, tokens):
     probas = torch.softmax(logits[:, -1], dim=-1)
     next_token = torch.argmax(probas, dim=-1).tolist()[0]
     return next_token
+
 
 def generate_greedy(model, tokenizer, x, max_length=50):
     token_ids = tokenizer.encode(x)

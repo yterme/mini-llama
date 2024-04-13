@@ -9,15 +9,13 @@ import torch
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from sentencepiece import SentencePieceProcessor
 
-from modules.transformer import Transformer, ModelArgs
+from modules.transformer import Transformer, ModelParams
 
 
-
-class LanguageModel(LightningModule):
-
+class TransformerLightning(LightningModule):
     def __init__(
         self,
-        model: torch.nn.Module,
+        model_params: ModelParams,
         gradient_clip: float = 1.0,
         pad_token: int = 0,
         context_length: int = 1024,
@@ -25,9 +23,9 @@ class LanguageModel(LightningModule):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.save_hyperparameters(ignore=["model"])
+        self.save_hyperparameters()
 
-        self.model = model
+        self.model = Transformer(model_params)
 
         self.gradient_clip = gradient_clip
         self.pad_token = pad_token

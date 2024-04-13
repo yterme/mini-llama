@@ -10,8 +10,8 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from modules.data import ChatDataset, TokenizedDataset, pad_collate
-from modules.model import LanguageModel
-from modules.transformer import ModelArgs, Transformer
+from modules.model import TransformerLightning
+from modules.transformer import ModelParams, Transformer
 
 
 def main(
@@ -21,12 +21,11 @@ def main(
     check_val_every_n_epoch: int,
     load_ckpt: str = None,
 ):
-
     if load_ckpt is not None:
-        language_model = LanguageModel.load_from_checkpoint(load_ckpt)
+        transformer_model = TransformerLightning.load_from_checkpoint(load_ckpt)
     else:
         model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
-        model_args = ModelArgs(**model_config)
+        model_args = ModelParams(**model_config)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
         model_args.vocab_size = tokenizer.vocab_size + 1
         pad_token = tokenizer.vocab_size
@@ -36,10 +35,8 @@ def main(
         num_workers = 6
         batch_size = 12
         # vocab_size = 50304
-
-        model = Transformer(model_args)
-        language_model = LanguageModel(
-            model=model,
+        transformer_model = TransformerLightning(
+            model_params=model_args,
             lr=lr,
             pad_token=pad_token,
             context_length=context_length,
@@ -47,7 +44,7 @@ def main(
         )
     callbacks = [
         ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max"),
-        ModelCheckpoint(every_n_train_steps=1000)
+        ModelCheckpoint(every_n_train_steps=1000),
     ]
     trainer = Trainer(
         accelerator="gpu",
@@ -96,9 +93,11 @@ def main(
         collate_fn=collate_fn,
         pin_memory=True,
     )
-    trainer.fit(language_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    trainer.fit(
+        transformer_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
+    )
     model_name = f"gpt_model_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pth"
-    torch.save(language_model.state_dict(), model_name)
+    torch.save(transformer_model.state_dict(), model_name)
 
 
 if __name__ == "__main__":
