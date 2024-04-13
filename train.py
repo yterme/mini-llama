@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 
+from dotenv import load_dotenv
 import yaml
 import torch
 from torch.utils.data import DataLoader
@@ -21,6 +22,7 @@ def main(
     check_val_every_n_epoch: int,
     load_ckpt: str = None,
 ):
+    load_dotenv()
     if load_ckpt is not None:
         transformer_model = TransformerLightning.load_from_checkpoint(load_ckpt)
     else:

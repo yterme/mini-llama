@@ -5,3 +5,4 @@ tokenizers
 sentencepiece
 pytorch_lightning
 accelerate
+python-dotenv
