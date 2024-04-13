@@ -1,6 +1,7 @@
-torch~=2.2.0
+torch
 datasets
-lightning~=1.9.5
 transformers
 tokenizers
 sentencepiece
+pytorch_lightning
+accelerate

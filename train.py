@@ -51,6 +51,9 @@ def main(
         check_val_every_n_epoch=check_val_every_n_epoch,
         callbacks=callbacks,
         max_epochs=epochs,
+        # devices=2,
+        strategy="ddp",
+        num_nodes=2,
     )
 
     if dataset == "chat":
