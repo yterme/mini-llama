@@ -1,4 +1,4 @@
-Mini LLama implementation:
+LLama implementation:
 - SwiGLU activation
 - ROPE embeddings
 - Grouped Query Attention
