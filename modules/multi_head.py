@@ -55,15 +55,15 @@ class MultiHeadAttention(nn.Module):
             # set to 1 for traditional multi head attention
             assert num_heads % num_query_heads_per_key == 0
             self.num_query_heads_per_key = num_query_heads_per_key
-        self.linear_q = nn.Linear(d_model, d_model)
+        self.linear_q = nn.Linear(d_model, d_model, bias=False)
         # For grouped query attention: K,V have fewer heads than Q
         num_kv_heads = self.num_q_heads // self.num_query_heads_per_key
-        self.linear_k = nn.Linear(d_model, self.d_k * num_kv_heads)
-        self.linear_v = nn.Linear(d_model, self.d_k * num_kv_heads)
+        self.linear_k = nn.Linear(d_model, self.d_k * num_kv_heads, bias=False)
+        self.linear_v = nn.Linear(d_model, self.d_k * num_kv_heads, bias=False)
         self.p_dropout = dropout
         self.dropout = nn.Dropout(p=dropout)
         self.softmax = nn.Softmax(dim=-1)
-        self.linear_proj = nn.Linear(d_model, d_model)
+        self.linear_proj = nn.Linear(d_model, d_model, bias=False)
 
     def compute_QK(self, Q, K):
         return Q, K
@@ -111,14 +111,24 @@ class MultiHeadAttention(nn.Module):
 
 
 class RotaryPEMultiHeadAttention(MultiHeadAttention):
-    def __init__(self, d_model: int, num_heads: int, rope_percentage: float = 0.5, **kwargs):
+    def __init__(self, d_model: int, num_heads: int, rope_percentage: float = 1.0, **kwargs):
         super().__init__(d_model=d_model, num_heads=num_heads, **kwargs)
         d_rope = int(self.d_k * rope_percentage)
         # not implemented for efficient attention
         assert not kwargs.get("use_efficient", False)
-        self.rotary_pe = RotaryPositionalEmbeddings(d_rope)
+        self.rotary_pe = RotaryPositionalEmbeddings(d_rope, max_position_embeddings=kwargs.get('max_position_embeddings', 2048))
 
     def compute_QK(self, query: torch.Tensor, key: torch.Tensor):
-        Q = self.rotary_pe(query)
-        K = self.rotary_pe(key)
+        # query/key shape: [batch_size, num_heads, seq_len, head_dim]
+        batch_size, num_heads, seq_len, head_dim = query.shape
+        
+        # Get cos and sin values
+        cos, sin = self.rotary_pe(query, seq_len)
+        
+        # Create position ids
+        position_ids = torch.arange(seq_len, device=query.device).unsqueeze(0)
+        
+        # Apply rotary positional embedding
+        Q, K = self.rotary_pe.apply_rotary_pos_emb(query, key, cos, sin, position_ids)
+        
         return Q, K

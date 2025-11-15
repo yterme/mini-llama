@@ -5,12 +5,13 @@ import math
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, d) -> None:
+    def __init__(self, d, eps=1e-5) -> None:
         super().__init__()
+        self.eps = eps
         self.scale = torch.nn.Parameter(torch.ones(d))
 
     def forward(self, x):
-        return x / (torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + 1e-6) * self.scale
+        return x / (torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + self.eps) * self.scale
 
 
 class TransformerEncoderBlock(nn.Module):
@@ -45,8 +46,8 @@ class SwiGLU(nn.Module):
     def __init__(self, input_dim, output_dim) -> None:
         super().__init__()
         self.swish = torch.nn.SiLU()
-        self.linear1 = nn.Linear(input_dim, output_dim)
-        self.linear2 = nn.Linear(input_dim, output_dim)
+        self.linear1 = nn.Linear(input_dim, output_dim, bias=False)
+        self.linear2 = nn.Linear(input_dim, output_dim, bias=False)
 
     def forward(self, x):
         return self.swish(self.linear1(x)) * self.linear2(x)
@@ -85,10 +86,10 @@ class DecoderBlock(nn.Module):
         if activation == "swiglu":
             self.activation_unit = SwiGLU(embed_dim, hidden_dim)
         else:
-            self.fc = nn.Linear(embed_dim, hidden_dim)
+            self.fc = nn.Linear(embed_dim, hidden_dim, bias=False)
             self.activation = {"gelu": NewGELU(), "relu": nn.ReLU()}[activation]
             self.activation_unit = lambda x: self.activation(self.fc(x))
-        self.proj = nn.Linear(hidden_dim, embed_dim)
+        self.proj = nn.Linear(hidden_dim, embed_dim, bias=False)
         self.dropout = nn.Dropout(dropout)
         self.mlp = lambda x: self.dropout(self.proj(self.activation_unit(x)))
 

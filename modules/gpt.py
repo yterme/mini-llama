@@ -50,6 +50,7 @@ class GPT(LightningModule):
         rope_embeddings=False,
         num_query_heads_per_key=None,
         intermediate_size=None,
+        learning_rate=1e-3,
         **kwargs
     ):
         super().__init__()
@@ -59,6 +60,7 @@ class GPT(LightningModule):
         self.d_model = d_model
         self.pad_token = pad_token
         self.context_length = context_length
+        self.learning_rate = learning_rate
         self.text_embedding = nn.Embedding(vocab_size, d_model)
         if rope_embeddings:
             # identity - embeddings are computed in the multi head attention layer
@@ -138,4 +140,4 @@ class GPT(LightningModule):
         return super().train_dataloader()
 
     def configure_optimizers(self) -> Any:
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
