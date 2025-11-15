@@ -49,9 +49,10 @@ class GPT(LightningModule):
         proba_dropout=0.01,
         rope_embeddings=False,
         num_query_heads_per_key=None,
+        intermediate_size=None,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__()
         self.save_hyperparameters()
 
         self.gradient_clip = gradient_clip
@@ -74,6 +75,7 @@ class GPT(LightningModule):
                     activation=activation,
                     rope=rope_embeddings,
                     num_query_heads_per_key=num_query_heads_per_key,
+                    intermediate_size=intermediate_size,
                 )
                 for _ in range(num_layers)
             ]

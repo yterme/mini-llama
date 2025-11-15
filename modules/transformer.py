@@ -62,6 +62,7 @@ class DecoderBlock(nn.Module):
         activation="swiglu",
         num_query_heads_per_key=None,
         rope=False,
+        intermediate_size=None,
     ) -> None:
         super().__init__()
         if rope:
@@ -80,7 +81,7 @@ class DecoderBlock(nn.Module):
         self.norm2 = {"rms": RMSNorm(embed_dim), "layer": nn.LayerNorm(embed_dim)}[norm]
 
         # MLP
-        hidden_dim = 4 * embed_dim
+        hidden_dim = intermediate_size if intermediate_size is not None else 4 * embed_dim
         if activation == "swiglu":
             self.activation_unit = SwiGLU(embed_dim, hidden_dim)
         else:

@@ -56,8 +56,10 @@ class MultiHeadAttention(nn.Module):
             assert num_heads % num_query_heads_per_key == 0
             self.num_query_heads_per_key = num_query_heads_per_key
         self.linear_q = nn.Linear(d_model, d_model)
-        self.linear_k = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
-        self.linear_v = nn.Linear(d_model, self.d_k * self.num_query_heads_per_key)
+        # For grouped query attention: K,V have fewer heads than Q
+        num_kv_heads = self.num_q_heads // self.num_query_heads_per_key
+        self.linear_k = nn.Linear(d_model, self.d_k * num_kv_heads)
+        self.linear_v = nn.Linear(d_model, self.d_k * num_kv_heads)
         self.p_dropout = dropout
         self.dropout = nn.Dropout(p=dropout)
         self.softmax = nn.Softmax(dim=-1)

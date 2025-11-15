@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+import os
 
 import yaml
 import torch
@@ -8,9 +9,14 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from datasets import load_dataset
 from transformers import AutoTokenizer
+from dotenv import load_dotenv
 
 from modules.data import ChatDataset, TokenizedDataset, pad_collate
 from modules.gpt import GPT
+from modules.tinyllama_utils import load_tinyllama_weights
+
+# Load environment variables
+load_dotenv()
 
 
 def main(
@@ -19,17 +25,43 @@ def main(
     epochs: int,
     check_val_every_n_epoch: int,
     load_ckpt: str = None,
+    load_tinyllama: str = None,
+    config_file: str = None,
 ):
-    # load yaml config model_config.yaml
-    model_config = yaml.load(open("model_config.yaml", "r"), Loader=yaml.FullLoader)
-    batch_size = 12
-    num_workers = 6
+    # load yaml config - use TinyLlama config if loading TinyLlama weights
+    if config_file is None:
+        config_file = "tinyllama_config.yaml" if load_tinyllama else "model_config.yaml"
+    
+    print(f"Using config file: {config_file}")
+    model_config = yaml.load(open(config_file, "r"), Loader=yaml.FullLoader)
+    batch_size = 1  # Reduced for memory constraints
+    num_workers = 2
+    
+    # Use appropriate context length for TinyLlama
     context_length = 1024
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
-    pad_token = tokenizer.vocab_size
-    vocab_size = 50304
-    # vocab_size = tokenizer.vocab_size + 1
+    
+    # Use proper pad token ID, not vocab_size
+    if tokenizer.pad_token_id is not None:
+        pad_token = tokenizer.pad_token_id
+    else:
+        pad_token = tokenizer.eos_token_id
+    
+    # Use TinyLlama's vocab size when loading TinyLlama weights
+    if load_tinyllama:
+        from transformers import AutoConfig
+        tinyllama_config = AutoConfig.from_pretrained(load_tinyllama)
+        vocab_size = tinyllama_config.vocab_size
+        print(f"Using TinyLlama vocab_size: {vocab_size}")
+        
+        # Ensure tokenizer vocab size matches or is smaller
+        if tokenizer.vocab_size > vocab_size:
+            print(f"Warning: Tokenizer vocab_size ({tokenizer.vocab_size}) > model vocab_size ({vocab_size})")
+            print("This may cause indexing errors. Consider using a compatible tokenizer.")
+    else:
+        vocab_size = 50304
+        # vocab_size = tokenizer.vocab_size + 1
 
     if load_ckpt is not None:
         # load checkpoint
@@ -41,6 +73,10 @@ def main(
             context_length=context_length,
             **model_config,
         )
+    
+    # Load TinyLlama weights if specified
+    if load_tinyllama is not None:
+        gpt_model = load_tinyllama_weights(gpt_model, load_tinyllama)
     # pytorch lightning model checkpoint
     callbacks = [
         ModelCheckpoint(monitor="val_acc", save_top_k=1, mode="max"),
@@ -56,7 +92,10 @@ def main(
     # huggingface tinystories dataset
     if dataset == "chat":
         train_dataset = ChatDataset(
-            "data/_chat_cleaned.txt", tokenizer=tokenizer, sequence_length=context_length + 1
+            "data/_chat_cleaned_train.txt", tokenizer=tokenizer, sequence_length=context_length + 1
+        )
+        val_dataset = ChatDataset(
+            "data/_chat_cleaned_val.txt", tokenizer=tokenizer, sequence_length=context_length + 1
         )
     elif dataset in ["tinystories", "french"]:
         if dataset == "tinystories":
@@ -111,5 +150,7 @@ if __name__ == "__main__":
         help="Check validation set every n epochs",
     )
     parser.add_argument("--load-ckpt", type=str, default=None, help="Path to checkpoint to load")
+    parser.add_argument("--load-tinyllama", type=str, default=None, help="Load TinyLlama weights (e.g., 'TinyLlama/TinyLlama-1.1B-Chat-v1.0')")
+    parser.add_argument("--config-file", type=str, default=None, help="Path to config YAML file")
     args = parser.parse_args()
     main(**vars(args))
