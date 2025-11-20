@@ -4,7 +4,6 @@ d_model: 2048
 num_layers: 22
 activation: "swiglu"
 norm: "rms"
-gradient_clip: 1.0
 proba_dropout: 0.0
 num_query_heads_per_key: 8  # 32 heads / 4 query groups = 8 (32/4 = 8)
 rope_embeddings: True

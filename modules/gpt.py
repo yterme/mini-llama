@@ -8,31 +8,6 @@ from torch import nn
 from modules.embedding import PositionalEmbedding
 from modules.transformer import DecoderBlock, RMSNorm
 
-def generate_single_greedy(model, tokenizer, x):
-    x = tokenizer.encode(x)
-    if x[-1] == tokenizer.eos_token_id:
-        x = x[:-1]
-    x = x[-model.context_length :]
-    i = len(x)
-    y = model._predict_probas(x)
-    y = torch.argmax(y, dim=1)
-    y_next = y[i - 1].item()
-    return tokenizer.convert_ids_to_tokens(y_next)
-
-
-def generate_greedy(model, tokenizer, x, max_length=50):
-    new_token = None
-    for _ in range(max_length):
-        new_token = generate_single_greedy(model, tokenizer, x)
-        if new_token.startswith("▁"):
-            new_token = new_token[1:]
-            if len(x) > 0 and not x.endswith(" "):
-                new_token = " " + new_token
-        x += new_token
-        if new_token == tokenizer.eos_token:
-            break
-    return x
-
 class GPT(LightningModule):
 
     def __init__(
@@ -41,7 +16,6 @@ class GPT(LightningModule):
         num_heads,
         d_model,
         context_length,
-        gradient_clip,
         pad_token,
         vocab_size,
         norm="rms",
@@ -55,8 +29,6 @@ class GPT(LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters()
-
-        self.gradient_clip = gradient_clip
         self.d_model = d_model
         self.pad_token = pad_token
         self.context_length = context_length
@@ -91,7 +63,11 @@ class GPT(LightningModule):
         x = self.pos_embedding(x)
         x = self.dropout(x)
         for layer in self.layers:
-            x = layer(x)
+            # Use gradient checkpointing to save memory
+            if self.training:
+                x = torch.utils.checkpoint.checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
         x = self.norm(x)
         x = self.lm_head(x)
         return x
@@ -102,6 +78,55 @@ class GPT(LightningModule):
         x = torch.tensor(x).unsqueeze(0).to(self.device)
         y = self.forward(x)[0]
         return torch.softmax(y, dim=1)
+
+    def generate(self, input_ids, tokenizer, max_new_tokens=50, temperature=0.8, top_k=None):
+        """Generate text tokens given input token IDs.
+        
+        Args:
+            input_ids: Tensor of shape (batch_size, seq_len) with input token IDs
+            tokenizer: Tokenizer to get EOS token ID
+            max_new_tokens: Maximum number of new tokens to generate
+            temperature: Sampling temperature (> 0 for sampling, 0 for greedy)
+            top_k: If set, only sample from top k tokens
+            
+        Returns:
+            Generated token IDs as tensor of shape (batch_size, original_len + new_tokens)
+        """
+        generated = input_ids.clone()
+        
+        with torch.no_grad():
+            for _ in range(max_new_tokens):
+                # Forward pass - only need logits for last position
+                logits = self.forward(generated)  # Shape: (batch_size, seq_len, vocab_size)
+                next_logits = logits[:, -1, :]   # Shape: (batch_size, vocab_size)
+                
+                # Apply temperature and sample
+                if temperature > 0:
+                    next_logits = next_logits / temperature
+                    
+                    # Apply top_k filtering if specified
+                    if top_k is not None:
+                        # Get top k values
+                        topk_logits, topk_indices = torch.topk(next_logits, k=top_k, dim=-1)
+                        # Create mask for top k
+                        mask = torch.full_like(next_logits, float('-inf'))
+                        mask.scatter_(-1, topk_indices, topk_logits)
+                        next_logits = mask
+                    
+                    probs = torch.softmax(next_logits, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1)  # Shape: (batch_size, 1)
+                else:
+                    # Greedy: take argmax
+                    next_token = torch.argmax(next_logits, dim=-1, keepdim=True)  # Shape: (batch_size, 1)
+                
+                # Append to generated sequence
+                generated = torch.cat([generated, next_token], dim=-1)
+                
+                # Check for EOS token in all batch items
+                if (next_token.squeeze(-1) == tokenizer.eos_token_id).all():
+                    break
+        
+        return generated
 
     def compute_metrics(self, batch) -> torch.Tensor:
         inputs, target = batch
@@ -116,19 +141,10 @@ class GPT(LightningModule):
         return loss, acc
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
-        opt = self.optimizers()
-        opt.zero_grad()
         loss, acc = self.compute_metrics(batch)
         self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        self.manual_backward(loss)
-        opt.step()
-
-    def manual_backward(self, loss: torch.Tensor, *args: Any, **kwargs: Any) -> None:
-        loss.backward(*args, **kwargs)
-        # gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.parameters(), self.gradient_clip)
-        return
+        return loss
 
     def validation_step(self, batch, batch_idx):
         loss, acc = self.compute_metrics(batch)
@@ -140,4 +156,6 @@ class GPT(LightningModule):
         return super().train_dataloader()
 
     def configure_optimizers(self) -> Any:
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        # Use SGD with momentum instead of Adam to save memory
+        # Adam requires 2x state (momentum + variance), SGD only needs 1x
+        return torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
