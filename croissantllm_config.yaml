@@ -1,0 +1,10 @@
+# CroissantLLM Model Configuration
+d_model: 2048
+num_layers: 24
+num_heads: 16
+num_query_heads_per_key: 1  # No grouped query attention (16/16 = 1)
+intermediate_size: 5504
+norm: "rms"
+activation: "swiglu"
+proba_dropout: 0.01
+rope_embeddings: true
